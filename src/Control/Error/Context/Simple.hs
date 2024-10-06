@@ -43,7 +43,8 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Trans.Resource
 import           Control.Monad.Writer
-import qualified Data.HashMap.Strict           as HashMap
+import qualified Data.Aeson.KeyMap              as KeyMap
+import qualified Data.Aeson.Key                 as Key
 import           Data.Text                      ( Text )
 
 -- | Data type implementing 'MonadErrorContext'.
@@ -79,7 +80,7 @@ errorNamespacePush label ctx =
 errorContextAdd :: Text -> Value -> ErrorContext -> ErrorContext
 errorContextAdd label val ctx =
   let currentKVs = errorContextKVs ctx
-  in  ctx { errorContextKVs = HashMap.insert label val currentKVs }
+  in  ctx { errorContextKVs = KeyMap.insert (Key.fromText label) val currentKVs }
 
 instance (MonadCatch m) => MonadErrorContext (ErrorContextT m) where
   errorContextCollect = ErrorContextT ask
@@ -108,7 +109,28 @@ instance MonadReader r m => MonadReader r (ErrorContextT m) where
     ErrorContextT (ReaderT (\ errCtx -> local f (m errCtx)))
 
 instance (MonadUnliftIO m, MonadCatch m) => MonadUnliftIO (ErrorContextT m) where
+
+  withRunInIO inner = 
+    ErrorContextT $ 
+    withRunInIO $ \run ->
+    inner (run . _runErrorContextT)
+{-
   askUnliftIO = do
     env <- ErrorContextT ask
     unlifter <- lift askUnliftIO
     pure $ UnliftIO (\ (ErrorContextT ec) -> unliftIO unlifter (runReaderT ec env))
+
+  withRunInIO :: ((forall a. m a -> IO a) -> IO b) -> m b
+-- for ReaderT
+  withRunInIO inner =
+    ReaderT $ \r ->
+    withRunInIO $ \run ->
+    inner (run . flip runReaderT r)
+
+
+askUnliftIO :: MonadUnliftIO m => m (UnliftIO m)
+askUnliftIO = withRunInIO (\run -> return (UnliftIO run))
+{-# INLINE askUnliftIO #-}
+-- Would be better, but GHC hates us
+-- askUnliftIO :: m (forall a. m a -> IO a)
+-- -}

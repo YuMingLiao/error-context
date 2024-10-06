@@ -35,9 +35,11 @@ import           Control.Monad.Catch            ( MonadThrow )
 import           Data.Aeson
 import qualified Data.ByteString.Lazy          as ByteString.Lazy
 import           Data.Function                  ( (&) )
-import           Data.HashMap.Strict            ( HashMap )
-import qualified Data.HashMap.Strict           as HashMap
+import           Data.Aeson.KeyMap              ( KeyMap ) 
+import qualified Data.Aeson.KeyMap             as KeyMap
+import qualified Data.Aeson.Key                as Key
 import           Data.Monoid
+import           Data.Semigroup
 import           Data.Text                      ( Text )
 import qualified Data.Text                     as Text
 import qualified Data.Text.Encoding            as Text
@@ -59,10 +61,12 @@ instance Applicative ErrorWithContext where
   (ErrorWithContext ctx f) <*> (ErrorWithContext ctx' a) = ErrorWithContext (ctx <> ctx') (f a)
 
 data ErrorContext =
-  ErrorContext { errorContextKVs       :: HashMap Text Value
+  ErrorContext { errorContextKVs       :: KeyMap Value
                , errorContextNamespace :: [Text] }
   deriving (Eq)
 
+instance Semigroup ErrorContext where
+  (<>) = undefined
 instance Monoid ErrorContext where
   mempty = ErrorContext mempty mempty
   (ErrorContext kvs namespace) `mappend` (ErrorContext kvs' namespace') =
@@ -91,10 +95,10 @@ errorContextAsString (ErrorContext hashmap layers) =
  where
   prettyPrintKvs =
     hashmap
-      & HashMap.toList
+      & KeyMap.toList
       & (map $ \(label, val) ->
           let
-            labelS = label & Text.unpack
+            labelS = label & Key.toText & Text.unpack
             valS =
               val
                 & encode
